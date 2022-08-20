@@ -10,7 +10,8 @@ ENV SAGEMAKER_SUBMIT_DIRECTORY /opt/ml/code
 COPY TFT.py /opt/ml/code/TFT.py
 
 RUN pip install pytorch-forecasting
-# RUN pip install --upgrade torch torchvision
+RUN pip install pyarrow
+RUN pip install fastparquet
 
 # Defines cifar10.py as script entrypoint 
 ENV SAGEMAKER_PROGRAM TFT.py

@@ -23,6 +23,6 @@ aws ecr get-login-password --region ${region}|docker login --username AWS --pass
 # with the full name.
 
 docker build -t ${algorithm_name} .
-# docker tag ${algorithm_name} ${fullname}
+docker tag ${algorithm_name} ${fullname}
 
-# docker push ${fullname}
+docker push ${fullname}

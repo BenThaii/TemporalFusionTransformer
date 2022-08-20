@@ -21,7 +21,10 @@ from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimi
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
+
 def _train(args):
+    global logger
+    
     is_distributed = len(args.hosts) > 1 and args.dist_backend is not None
     logger.debug("Distributed training - {}".format(is_distributed))
 
@@ -131,7 +134,7 @@ def _train(args):
 
     print("get GPU information")
     num_GPU = 0
-    if torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() >= 1:
         num_GPU = torch.cuda.device_count()
         print("GPU count: {}".format(num_GPU))
 
@@ -174,7 +177,7 @@ def _train(args):
         tft,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-        ckpt_path = args.checkpoint_path
+        ckpt_path = args.checkpoint_path + '/checkpoint.pth'
     )
 
     best_model_path = trainer.checkpoint_callback.best_model_path
