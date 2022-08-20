@@ -1,6 +1,9 @@
 import copy
 from pathlib import Path
 import warnings
+import argparse
+import json
+import os
 
 import numpy as np
 import pandas as pd
@@ -14,7 +17,8 @@ from pytorch_forecasting.data import GroupNormalizer
 from pytorch_forecasting.metrics import SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 
-
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 def _train(args):
     is_distributed = len(args.hosts) > 1 and args.dist_backend is not None
