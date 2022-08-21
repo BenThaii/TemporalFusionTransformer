@@ -9,7 +9,9 @@ region=$(aws configure get region)
 fullname="${account}.dkr.ecr.${region}.amazonaws.com/${algorithm_name}:latest"
 
 # clean up docker resources on local machine
-docker system prune -y
+docker system prune -f
+docker rmi $(docker images | grep ${algorithm_name})         # delete previous version of the image prior to building the new one (save space)
+
 
 # If the repository doesn't exist in ECR, create it.
 

@@ -9,9 +9,8 @@ ENV SAGEMAKER_SUBMIT_DIRECTORY /opt/ml/code
 # /opt/ml and all subdirectories are utilized by SageMaker, use the /code subdirectory to store your user code.
 COPY TFT.py /opt/ml/code/TFT.py
 
-RUN pip install pytorch-forecasting
-RUN pip install pyarrow
-RUN pip install fastparquet
+COPY requirements.txt /opt/ml/code
+RUN pip install -r /opt/ml/code/requirements.txt
 
 # Defines cifar10.py as script entrypoint 
 ENV SAGEMAKER_PROGRAM TFT.py
