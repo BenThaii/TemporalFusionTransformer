@@ -9,9 +9,10 @@ import logging
 import numpy as np
 import pandas as pd
 import pytorch_lightning as pl
-from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor
+from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, ModelCheckpoint
 from pytorch_lightning.loggers import TensorBoardLogger
 import torch
+import torch.distributed as dist
 
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data import GroupNormalizer
@@ -28,11 +29,19 @@ def _train(args):
     is_distributed = len(args.hosts) > 1 and args.dist_backend is not None
     logger.debug("Distributed training - {}".format(is_distributed))
 
+    # create checkpoint directory if none existed
     if os.path.isdir(args.checkpoint_path):
         print("Checkpointing directory {} exists".format(args.checkpoint_path))
     else:
         print("Creating Checkpointing directory {}".format(args.checkpoint_path))
         os.mkdir(args.checkpoint_path)
+    
+    
+    # check if a checkpoint file exists within the checkpoint directory
+    ckpt_file_path = None
+    candidate_ckpt_file_path = args.checkpoint_path + '/last.ckpt'
+    if os.path.exists(candidate_ckpt_file_path):
+        ckpt_file_path = candidate_ckpt_file_path
     
     if is_distributed:
         # Initialize the distributed environment.
@@ -142,17 +151,27 @@ def _train(args):
     print("create model trainer")
     # configure network and trainer
     early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
+    checkpoint_call_back = ModelCheckpoint(
+            monitor='val_loss',
+            dirpath = args.checkpoint_path,
+            filename = '{epoch}-{val_loss:.2f}',
+            save_last = True,
+            auto_insert_metric_name = True
+            
+            
+        )
     lr_logger = LearningRateMonitor()  # log the learning rate
     logger = TensorBoardLogger("lightning_logs")  # logging results to a tensorboard
 
     trainer = pl.Trainer(
-        max_epochs=30,
+        # max_epochs=30,
+        max_epochs=args.epochs,
         gpus=num_GPU,
         weights_summary="top",
         gradient_clip_val=0.1,
         limit_train_batches=30,  # coment in for training, running valiation every 30 batches
         # fast_dev_run=True,  # comment in to check that networkor dataset has no serious bugs
-        callbacks=[lr_logger, early_stop_callback],
+        callbacks=[lr_logger, early_stop_callback, checkpoint_call_back],
         logger=logger,
     )
 
@@ -177,7 +196,7 @@ def _train(args):
         tft,
         train_dataloaders=train_dataloader,
         val_dataloaders=val_dataloader,
-        ckpt_path = args.checkpoint_path + '/checkpoint.pth'
+        ckpt_path = ckpt_file_path
     )
 
     best_model_path = trainer.checkpoint_callback.best_model_path

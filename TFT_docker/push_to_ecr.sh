@@ -8,6 +8,9 @@ region=$(aws configure get region)
 
 fullname="${account}.dkr.ecr.${region}.amazonaws.com/${algorithm_name}:latest"
 
+# clean up docker resources on local machine
+docker system prune -y
+
 # If the repository doesn't exist in ECR, create it.
 
 aws ecr describe-repositories --repository-names "${algorithm_name}" > /dev/null 2>&1
