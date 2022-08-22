@@ -127,7 +127,7 @@ def _train(args):
             
         )
     lr_logger = LearningRateMonitor()  # log the learning rate
-    logger = TensorBoardLogger("/lightning_logs")  # logging results to a tensorboard
+    logger = TensorBoardLogger(save_dir = "/lightning_logs", name = "TemporalFusionTransformer")  # logging results to a tensorboard
 
     trainer = pl.Trainer(
         max_epochs=args.epochs,
