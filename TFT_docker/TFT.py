@@ -168,14 +168,14 @@ def _train(args):
     best_model_path = trainer.checkpoint_callback.best_model_path
     best_tft = TemporalFusionTransformer.load_from_checkpoint(best_model_path)
 
-    return _save_model(best_tft, args.model_dir)
+    return _save_model(trainer, args.model_dir)
 
 
-def _save_model(model, model_dir):
+def _save_model(model_trainer, model_dir):
     print("Saving the model.")
-    path = os.path.join(model_dir, 'model.pth')
-    # recommended way from http://pytorch.org/docs/master/notes/serialization.html
-    torch.save(model.cpu().state_dict(), path)
+    path = os.path.join(model_dir, 'model_trainer.ckpt')
+    # reference link: https://pytorch-lightning.readthedocs.io/en/stable/common/checkpointing_intermediate.html
+    model_trainer.save_checkpoint(path)
 
 
 def _save_checkpoint(model, optimizer, epoch, loss, args):
