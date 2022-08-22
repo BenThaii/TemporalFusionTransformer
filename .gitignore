@@ -2,4 +2,4 @@ data/*
 timeseries_data/*
 __pycache__/*
 .ipynb_checkpoints/*
-TFT_docer/logs/*
+TFT_docker/logs/*
