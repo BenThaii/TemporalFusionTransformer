@@ -3,3 +3,4 @@ timeseries_data/*
 __pycache__/*
 .ipynb_checkpoints/*
 TFT_docker/logs/*
+trained_model_artifact/*
