@@ -96,6 +96,7 @@ def _train(args):
         add_relative_time_idx= training_metadata['add_relative_time_idx'],
         add_target_scales= training_metadata['add_target_scales'],
         add_encoder_length= training_metadata['add_encoder_length'],
+        allow_missing_timesteps = training_metadata["allow_missing_timesteps"]
     )
 
     # create validation set (predict=True) which means to predict the last max_prediction_length points in time
