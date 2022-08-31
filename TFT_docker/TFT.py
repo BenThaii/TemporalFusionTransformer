@@ -43,7 +43,6 @@ def _train(args):
     minibatch_size = args.minibatch_size
     max_gradient_norm = args.max_gradient_norm
     num_heads = args.num_heads
-    stack_size = args.stack_size
     
     is_distributed = len(args.hosts) > 1 and args.dist_backend is not None
     logger.debug("Distributed training - {}".format(is_distributed))
@@ -120,9 +119,8 @@ def _train(args):
     validation = TimeSeriesDataSet.from_dataset(training, data, predict=True, stop_randomization=True)
 
     # create dataloaders for model
-    batch_size = 128  # set this between 32 to 128
-    train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
-    val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
+    train_dataloader = training.to_dataloader(train=True, batch_size=minibatch_size, num_workers=os.cpu_count())
+    val_dataloader = validation.to_dataloader(train=False, batch_size=minibatch_size * 10, num_workers=os.cpu_count())
 
 
     print("create model trainer")
@@ -130,7 +128,7 @@ def _train(args):
     pl.seed_everything(42)
     
     
-    early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
+    early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=early_stopping_patience, verbose=False, mode="min")
     checkpoint_call_back = ModelCheckpoint(
             monitor='val_loss',
             dirpath = args.checkpoint_path,
@@ -264,14 +262,12 @@ if __name__ == '__main__':
     parser.add_argument('--hidden-layer-size', type=int, default=160)
     parser.add_argument('--learning-rate', type=float, default=0.001, metavar='LR',
                         help='initial learning rate (default: 0.001)')
-    parser.add_argument('--minibatch-size', type=int, default=64)
     parser.add_argument('--minibatch-size', type=int, default=4, metavar='BS',
                         help='batch size (default: 4)')
     parser.add_argument('--max-gradient-norm', type=float, default=0.01)
     parser.add_argument('--num-heads', type=int, default=4)
-    parser.add_argument('--stack-size', type=str, default=1)
     
-    if os.environ['SM_NUM_GPUS'] > 0:
+    if int(os.environ['SM_NUM_GPUS']) > 0:
         parser.add_argument('--multiprocessing-workers', type=int, default=os.environ['SM_NUM_GPUS'])
     else:
         parser.add_argument('--multiprocessing-workers', type=int, default=os.environ['SM_NUM_CPUS'])
