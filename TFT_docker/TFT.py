@@ -29,6 +29,22 @@ logger.addHandler(logging.StreamHandler(sys.stdout))
 def _train(args):
     global logger
     
+    # unpack arguments:
+    max_prediction_length = args.max_prediction_length
+    max_encoder_length = args.max_encoder_length
+    num_epochs = args.num_epochs
+    early_stopping_patience = args.early_stopping_patience
+    multiprocessing_workers = args.multiprocessing_workers
+
+
+    dropout_rate = args.dropout_rate
+    hidden_layer_size = args.hidden_layer_size
+    learning_rate = args.learning_rate
+    minibatch_size = args.minibatch_size
+    max_gradient_norm = args.max_gradient_norm
+    num_heads = args.num_heads
+    stack_size = args.stack_size
+    
     is_distributed = len(args.hosts) > 1 and args.dist_backend is not None
     logger.debug("Distributed training - {}".format(is_distributed))
 
@@ -108,15 +124,12 @@ def _train(args):
     train_dataloader = training.to_dataloader(train=True, batch_size=batch_size, num_workers=0)
     val_dataloader = validation.to_dataloader(train=False, batch_size=batch_size * 10, num_workers=0)
 
-    print("get GPU information")
-    num_GPU = 0
-    if torch.cuda.device_count() >= 1:
-        num_GPU = torch.cuda.device_count()
-        print("GPU count: {}".format(num_GPU))
-
 
     print("create model trainer")
     # configure network and trainer
+    pl.seed_everything(42)
+    
+    
     early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=10, verbose=False, mode="min")
     checkpoint_call_back = ModelCheckpoint(
             monitor='val_loss',
@@ -130,31 +143,62 @@ def _train(args):
     lr_logger = LearningRateMonitor()  # log the learning rate
     logger = TensorBoardLogger(save_dir = "/lightning_logs", name = "TemporalFusionTransformer")  # logging results to a tensorboard
 
+    
     trainer = pl.Trainer(
-        max_epochs=args.epochs,
-        gpus=num_GPU,
+        max_epochs= num_epochs,
+        accelerator= "auto",
+        devices= "auto",
         weights_summary="top",
-        gradient_clip_val=0.1,
-        limit_train_batches=30,  # coment in for training, running valiation every 30 batches
-        # fast_dev_run=True,  # comment in to check that networkor dataset has no serious bugs
-        callbacks=[lr_logger, early_stop_callback, checkpoint_call_back],
+        gradient_clip_val= max_gradient_norm,
+        callbacks=[lr_logger, early_stop_callback],
         logger=logger,
-#         enable_progress_bar=False
     )
+    
+#     print("get GPU information")
+#     num_GPU = 0
+#     if torch.cuda.device_count() >= 1:
+#         num_GPU = torch.cuda.device_count()
+#         print("GPU count: {}".format(num_GPU))
+    
+#     trainer = pl.Trainer(
+#         max_epochs=args.epochs,
+#         gpus=num_GPU,
+#         weights_summary="top",
+#         gradient_clip_val=0.1,
+# #         limit_train_batches=30,  # coment in for training, running valiation every 30 batches
+#         # fast_dev_run=True,  # comment in to check that networkor dataset has no serious bugs
+#         callbacks=[lr_logger, early_stop_callback, checkpoint_call_back],
+#         logger=logger,
+# #         enable_progress_bar=False
+#     )
 
     print("create model from dataset")
     tft = TemporalFusionTransformer.from_dataset(
         training,
-        learning_rate=0.03,
-        hidden_size=16,
-        attention_head_size=1,
-        dropout=0.1,
-        hidden_continuous_size=8,
-        output_size=7,  # 7 quantiles by default
+        # not meaningful for finding the learning rate but otherwise very important
+        learning_rate= learning_rate,
+        hidden_size= hidden_layer_size,        # most important hyperparameter apart from learning rate
+        attention_head_size= num_heads,        # number of attention heads. Set to up to 4 for large datasets
+        dropout= dropout_rate,                 # between 0.1 and 0.3 are good values
+    #     hidden_continuous_size=8,              # set to <= hidden_size
+        hidden_continuous_size=hidden_layer_size,  # set to <= hidden_size
+        output_size=7,                         # 7 quantiles by default
         loss=QuantileLoss(),
-        log_interval=10,  # uncomment for learning rate finder and otherwise, e.g. to 10 for logging every 10 batches
-        reduce_on_plateau_patience=4,
+        # reduce learning rate if no improvement in validation loss after x epochs
+        reduce_on_plateau_patience= early_stopping_patience,
     )
+#     tft = TemporalFusionTransformer.from_dataset(
+#         training,
+#         learning_rate=0.03,
+#         hidden_size=16,
+#         attention_head_size=1,
+#         dropout=0.1,
+#         hidden_continuous_size=8,
+#         output_size=7,  # 7 quantiles by default
+#         loss=QuantileLoss(),
+#         log_interval=10,  # uncomment for learning rate finder and otherwise, e.g. to 10 for logging every 10 batches
+#         reduce_on_plateau_patience=4,
+#     )
     print(f"Number of parameters in network: {tft.size()/1e3:.1f}k")
 
 
@@ -196,12 +240,6 @@ if __name__ == '__main__':
 
     parser.add_argument('--workers', type=int, default=2, metavar='W',
                         help='number of data loading workers (default: 2)')
-    parser.add_argument('--epochs', type=int, default=2, metavar='E',
-                        help='number of total epochs to run (default: 2)')
-    parser.add_argument('--batch_size', type=int, default=4, metavar='BS',
-                        help='batch size (default: 4)')
-    parser.add_argument('--lr', type=float, default=0.001, metavar='LR',
-                        help='initial learning rate (default: 0.001)')
     parser.add_argument('--momentum', type=float, default=0.9, metavar='M', help='momentum (default: 0.9)')
     parser.add_argument('--dist_backend', type=str, default='gloo', help='distributed backend (default: gloo)')
 
@@ -214,4 +252,31 @@ if __name__ == '__main__':
     
     parser.add_argument('--data-filename', type=str, default="data.parquet")
     parser.add_argument('--metadata-filename', type=str, default="metadata.json")
+    
+    
+    
+    parser.add_argument('--max-prediction-length', type=int, default= 24)
+    parser.add_argument('--max-encoder-length', type=int, default=24 * 7)
+    parser.add_argument('--num-epochs', type=int, default=2, metavar='E',
+                        help='number of total epochs to run (default: 2)')
+    parser.add_argument('--early-stopping-patience', type=int, default= 5)
+    parser.add_argument('--dropout-rate', type=float, default=0.1)
+    parser.add_argument('--hidden-layer-size', type=int, default=160)
+    parser.add_argument('--learning-rate', type=float, default=0.001, metavar='LR',
+                        help='initial learning rate (default: 0.001)')
+    parser.add_argument('--minibatch-size', type=int, default=64)
+    parser.add_argument('--minibatch-size', type=int, default=4, metavar='BS',
+                        help='batch size (default: 4)')
+    parser.add_argument('--max-gradient-norm', type=float, default=0.01)
+    parser.add_argument('--num-heads', type=int, default=4)
+    parser.add_argument('--stack-size', type=str, default=1)
+    
+    if os.environ['SM_NUM_GPUS'] > 0:
+        parser.add_argument('--multiprocessing-workers', type=int, default=os.environ['SM_NUM_GPUS'])
+    else:
+        parser.add_argument('--multiprocessing-workers', type=int, default=os.environ['SM_NUM_CPUS'])
+
+    
+    
+    
     _train(parser.parse_args())
