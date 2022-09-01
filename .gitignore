@@ -6,3 +6,4 @@ TFT_docker/logs/*
 trained_model_artifact/*
 lightning_logs/*
 tft_google/tft/outputs/data/*
+tft_google/timeseries_data/*
