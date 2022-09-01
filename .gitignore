@@ -5,3 +5,4 @@ __pycache__/*
 TFT_docker/logs/*
 trained_model_artifact/*
 lightning_logs/*
+tft_google/tft/outputs/data/*
