@@ -6,6 +6,8 @@ import json
 import os
 import logging
 import sys
+import datetime
+
 
 import numpy as np
 import pandas as pd
@@ -14,6 +16,7 @@ from pytorch_lightning.callbacks import EarlyStopping, LearningRateMonitor, Mode
 from pytorch_lightning.loggers import TensorBoardLogger
 import torch
 import torch.distributed as dist
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Union
 
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data import GroupNormalizer
@@ -24,6 +27,38 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(logging.StreamHandler(sys.stdout))
 
+class CustomTensorboardLogger(TensorBoardLogger):
+    def __init__(
+        self,
+        save_dir: str,
+        name: Optional[str] = "lightning_logs",
+        version: Optional[Union[int, str]] = None,
+        log_graph: bool = False,
+        default_hp_metric: bool = True,
+        prefix: str = "",
+        sub_dir: Optional[str] = None,
+        **kwargs: Any,
+    ):
+        super().__init__(
+            save_dir = save_dir,
+            name = name,
+            version = version,
+            log_graph = log_graph,
+            default_hp_metric = default_hp_metric,
+            prefix = prefix,
+            sub_dir = sub_dir,
+            **kwargs
+        )
+        
+        
+    def log_metrics(self, metrics: Mapping[str, float], step: Optional[int] = None) -> None:
+        print(metrics)
+        
+        #write to tensorboard
+        super().log_metrics(
+            metrics = metrics,
+            step = step
+        )
 
 
 def _train(args):
@@ -134,43 +169,51 @@ def _train(args):
             dirpath = args.checkpoint_path,
             filename = '{epoch}-{val_loss:.2f}',
             save_last = True,
-            auto_insert_metric_name = True
-            
-            
+            auto_insert_metric_name = True,
+#             train_time_interval = datetime.timedelta(minutes=10)            
         )
     lr_logger = LearningRateMonitor()  # log the learning rate
-    logger = TensorBoardLogger(save_dir = "/lightning_logs", name = "TemporalFusionTransformer")  # logging results to a tensorboard
+    
+    import logging
 
+    # configure logging at the root level of Lightning
+    logger = logging.getLogger("pytorch_lightning").setLevel(logging.INFO)
+
+#     # configure logging on module level, redirect to file
+#     logger = logging.getLogger("pytorch_lightning.core")
+#     logger.addHandler(logging.FileHandler("core.log"))
     
-    trainer = pl.Trainer(
-        max_epochs= num_epochs,
-        accelerator= "auto",
-        devices= "auto",
-        weights_summary="top",
-        gradient_clip_val= max_gradient_norm,
-        callbacks=[lr_logger, early_stop_callback],
-        logger=logger,
-    )
-    
-#     print("get GPU information")
-#     num_GPU = 0
-#     if torch.cuda.device_count() >= 1:
-#         num_GPU = torch.cuda.device_count()
-#         print("GPU count: {}".format(num_GPU))
-    
-#     trainer = pl.Trainer(
-#         max_epochs=args.epochs,
-#         gpus=num_GPU,
-#         weights_summary="top",
-#         gradient_clip_val=0.1,
-# #         limit_train_batches=30,  # coment in for training, running valiation every 30 batches
-#         # fast_dev_run=True,  # comment in to check that networkor dataset has no serious bugs
-#         callbacks=[lr_logger, early_stop_callback, checkpoint_call_back],
-#         logger=logger,
-# #         enable_progress_bar=False
-#     )
+    logger = CustomTensorboardLogger(save_dir = "/lightning_logs", name = "TemporalFusionTransformer")  # logging results to a tensorboard
+
+    if args.run_mode == "test":    
+        trainer = pl.Trainer(
+            max_epochs= num_epochs,
+            accelerator= "auto",
+            devices= "auto",
+            weights_summary="top",
+            gradient_clip_val= max_gradient_norm,
+            callbacks=[lr_logger, early_stop_callback, checkpoint_call_back],
+            logger=logger,
+            progress_bar_refresh_rate=0,                     # disable tqdm progress bar (log is annoying in Sagemaker)
+            limit_train_batches=30
+        )
+    elif args.run_mode == "real":
+        trainer = pl.Trainer(
+            max_epochs= num_epochs,
+            accelerator= "auto",
+            devices= "auto",
+            weights_summary="top",
+            gradient_clip_val= max_gradient_norm,
+            callbacks=[lr_logger, early_stop_callback, checkpoint_call_back],
+            logger=logger,
+            progress_bar_refresh_rate=0,                     # disable tqdm progress bar (log is annoying in Sagemaker)
+        )
+    else:
+        raise Exception ("training mode must be either 'real' or 'test'")
+        
 
     print("create model from dataset")
+        
     tft = TemporalFusionTransformer.from_dataset(
         training,
         # not meaningful for finding the learning rate but otherwise very important
@@ -185,18 +228,7 @@ def _train(args):
         # reduce learning rate if no improvement in validation loss after x epochs
         reduce_on_plateau_patience= early_stopping_patience,
     )
-#     tft = TemporalFusionTransformer.from_dataset(
-#         training,
-#         learning_rate=0.03,
-#         hidden_size=16,
-#         attention_head_size=1,
-#         dropout=0.1,
-#         hidden_continuous_size=8,
-#         output_size=7,  # 7 quantiles by default
-#         loss=QuantileLoss(),
-#         log_interval=10,  # uncomment for learning rate finder and otherwise, e.g. to 10 for logging every 10 batches
-#         reduce_on_plateau_patience=4,
-#     )
+    
     print(f"Number of parameters in network: {tft.size()/1e3:.1f}k")
 
 
@@ -207,9 +239,6 @@ def _train(args):
         val_dataloaders=val_dataloader,
         ckpt_path = ckpt_file_path
     )
-
-    best_model_path = trainer.checkpoint_callback.best_model_path
-    best_tft = TemporalFusionTransformer.load_from_checkpoint(best_model_path)
 
     return _save_model(trainer, args.model_dir)
 
@@ -252,6 +281,8 @@ if __name__ == '__main__':
     parser.add_argument('--metadata-filename', type=str, default="metadata.json")
     
     
+    
+    parser.add_argument('--run-mode', type=str, default="real", help='use "real" if run in full, otherwise, use "test"')
     
     parser.add_argument('--max-prediction-length', type=int, default= 24)
     parser.add_argument('--max-encoder-length', type=int, default=24 * 7)
