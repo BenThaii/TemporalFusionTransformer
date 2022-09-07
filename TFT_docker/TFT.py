@@ -163,11 +163,11 @@ def _train(args):
     pl.seed_everything(42)
     
     
-    early_stop_callback = EarlyStopping(monitor="val_loss", min_delta=1e-4, patience=early_stopping_patience, verbose=False, mode="min")
+    early_stop_callback = EarlyStopping(monitor="{}".format(args.main_training_metric), min_delta=1e-4, patience=early_stopping_patience, verbose=False, mode="min")
     checkpoint_call_back = ModelCheckpoint(
-            monitor='val_loss',
+            monitor='{}'.format(args.main_training_metric),
             dirpath = args.checkpoint_path,
-            filename = '{epoch}-{val_loss:.2f}',
+            filename = '{epoch}-{' + str(args.main_training_metric) + ':.2f}',
             save_last = True,
             auto_insert_metric_name = True,
 #             train_time_interval = datetime.timedelta(minutes=10)            
@@ -297,6 +297,7 @@ if __name__ == '__main__':
                         help='batch size (default: 4)')
     parser.add_argument('--max-gradient-norm', type=float, default=0.01)
     parser.add_argument('--num-heads', type=int, default=4)
+    parser.add_argument('--main-training-metric', type=str, default="val_loss")
     
     if int(os.environ['SM_NUM_GPUS']) > 0:
         parser.add_argument('--multiprocessing-workers', type=int, default=os.environ['SM_NUM_GPUS'])
