@@ -9,8 +9,9 @@ ENV SAGEMAKER_SUBMIT_DIRECTORY /opt/ml/code
 # /opt/ml and all subdirectories are utilized by SageMaker, use the /code subdirectory to store your user code.
 COPY TFT.py /opt/ml/code/TFT.py
 
-COPY requirements.txt /opt/ml/code
+COPY requirements.txt /opt/ml/code/requirements.txt
 RUN pip install -r /opt/ml/code/requirements.txt
 
 # Defines cifar10.py as script entrypoint 
-ENV SAGEMAKER_PROGRAM TFT.py
+# ENV SAGEMAKER_PROGRAM TFT.py
+ENTRYPOINT ["python", "/opt/ml/code/TFT.py"]
