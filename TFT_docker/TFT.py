@@ -20,6 +20,7 @@ from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Union
 
 from pytorch_forecasting import Baseline, TemporalFusionTransformer, TimeSeriesDataSet
 from pytorch_forecasting.data import GroupNormalizer
+from pytorch_forecasting.data import encoders
 from pytorch_forecasting.metrics import SMAPE, PoissonLoss, QuantileLoss
 from pytorch_forecasting.models.temporal_fusion_transformer.tuning import optimize_hyperparameters
 
@@ -119,12 +120,19 @@ def _train(args):
     training_metadata = {}
     with open("{}/{}".format(args.data_dir, args.metadata_filename)) as json_file:
         training_metadata = json.load(json_file)
-
-
+    
+    # prepare category encoders
+    cat_encoders = {}
+    for cat in training_metadata['dimensions_w_potentially_unseen_values']:
+        cat_encoders[cat] = encoders.NaNLabelEncoder(add_nan=True)
+    
+    train_df = data[lambda x: x[training_metadata['time_idx']] <= training_metadata['training_cutoff']]
+    val_df = data[lambda x: x[training_metadata['time_idx']] > training_metadata['training_cutoff']]
+        
     print("creating dataloader")
 
     training = TimeSeriesDataSet(
-        data[lambda x: x[training_metadata['time_idx']] <= training_metadata['training_cutoff']],
+        train_df,
         time_idx= training_metadata['time_idx'],
         target= training_metadata['target'],
         group_ids= training_metadata['group_ids'],
@@ -146,12 +154,13 @@ def _train(args):
         add_relative_time_idx= training_metadata['add_relative_time_idx'],
         add_target_scales= training_metadata['add_target_scales'],
         add_encoder_length= training_metadata['add_encoder_length'],
-        allow_missing_timesteps = training_metadata["allow_missing_timesteps"]
+        allow_missing_timesteps = training_metadata["allow_missing_timesteps"],
+        categorical_encoders= cat_encoders
     )
 
     # create validation set (predict=True) which means to predict the last max_prediction_length points in time
     # for each series
-    validation = TimeSeriesDataSet.from_dataset(training, data, predict=True, stop_randomization=True)
+    validation = TimeSeriesDataSet.from_dataset(training, pd.concat([train_df, val_df]), predict=True, stop_randomization=True)
 
     # create dataloaders for model
     train_dataloader = training.to_dataloader(train=True, batch_size=minibatch_size, num_workers=os.cpu_count())
