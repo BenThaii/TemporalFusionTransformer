@@ -179,7 +179,7 @@ def _train(args):
             filename = '{epoch}-{' + str(args.main_training_metric) + ':.2f}',
             save_last = True,
             auto_insert_metric_name = True,
-#             train_time_interval = datetime.timedelta(minutes=10)            
+            train_time_interval = datetime.timedelta(minutes=10)            
         )
     lr_logger = LearningRateMonitor()  # log the learning rate
     
