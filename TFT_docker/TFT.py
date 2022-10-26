@@ -129,6 +129,11 @@ def _train(args):
     train_df = data[lambda x: x[training_metadata['time_idx']] <= training_metadata['training_cutoff']]
     val_df = data[lambda x: x[training_metadata['time_idx']] > training_metadata['training_cutoff']]
         
+    # refine validation dataframe to only contain elements already seen in train dataframe
+    for category_dimension in training_metadata['group_ids']:
+        val_df = val_df[val_df[category_dimension].isin(train_df[category_dimension].unique())]
+        
+        
     print("creating dataloader")
 
     training = TimeSeriesDataSet(
